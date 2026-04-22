@@ -59,7 +59,7 @@ def main():
         learning_rate=5e-5,
         num_train_epochs=3,
         save_strategy="epoch",
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         logging_dir="/kaggle/working/logs",
         logging_steps=10,
         remove_unused_columns=False, # Essential for VideoMAE with custom pixel_values input
