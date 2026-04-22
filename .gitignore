@@ -1,0 +1,22 @@
+# Environments
+venv/
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Datasets and Checkpoints
+data/
+*.pt
+*.pth
+*.ckpt
+outputs/
+runs/
