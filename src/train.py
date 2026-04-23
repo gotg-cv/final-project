@@ -9,27 +9,38 @@ import os
 import argparse
 import random
 import json
+import pandas as pd
 from transformers import Trainer, TrainingArguments
 from src.model_builder import get_daisee_model
 from src.data_loader import DaiseeDataset
 
-def get_video_paths_and_labels(data_dir):
+def parse_daisee_csv(data_root, split_name):
     """
-    Placeholder function to extract video paths and labels.
-    In a real scenario, this would parse the DAiSEE Labels CSVs
-    and map them to the .avi files in the data_dir.
+    Parses the DAiSEE CSV and builds aligned lists of valid video paths and labels.
+    split_name should be 'Train', 'Validation', or 'Test'.
     """
-    print(f"Scanning {data_dir} for videos and labels...")
-    # NOTE: Replace this with your actual DAiSEE dataset parsing logic!
-    # Example:
-    # df = pd.read_csv(os.path.join(data_dir, 'Labels', 'TrainLabels.csv'))
-    # video_paths = [os.path.join(data_dir, 'DataSet', f) for f in df['ClipID']]
-    # labels = df['AffectiveState'].tolist()
+    csv_path = os.path.join(data_root, "Labels", f"{split_name}Labels.csv")
+    df = pd.read_csv(csv_path)
     
-    # Returning 100 dummy entries for the sake of testing script structure
-    dummy_paths = ["dummy_path.avi"] * 100
-    dummy_labels = [random.randint(0, 3) for _ in range(100)]
-    return dummy_paths, dummy_labels
+    video_paths = []
+    labels = []
+    
+    for _, row in df.iterrows():
+        clip_id = str(row['ClipID']).replace('.avi', '').replace('.mp4', '')
+        folder_id = clip_id[:6] # The first 6 digits determine the parent folder
+        
+        # Construct exact path: DataSet/Train/400023/4000231047/4000231047.avi
+        video_path = os.path.join(data_root, "DataSet", split_name, folder_id, clip_id, f"{clip_id}.avi")
+        
+        if os.path.exists(video_path):
+            # DAiSEE scores: 0=Boredom, 1=Confusion, 2=Engagement, 3=Frustration (to match our model head)
+            scores = [row['Boredom'], row['Confusion'], row['Engagement'], row['Frustration']]
+            dominant_label = scores.index(max(scores))
+            
+            video_paths.append(video_path)
+            labels.append(dominant_label)
+            
+    return video_paths, labels
 
 def main():
     parser = argparse.ArgumentParser(description="Fine-tune VideoMAE on DAiSEE")
@@ -45,12 +56,11 @@ def main():
     # Instantiate the model executing the ablation study baseline (training only the head)
     model = get_daisee_model(freeze_base=config["freeze_base"])
     
-    train_path = os.path.join(args.data_root, "DataSet", "Train")
-    val_path = os.path.join(args.data_root, "DataSet", "Validation")
-    
-    print("Loading data...")
-    train_paths, train_labels = get_video_paths_and_labels(train_path)
-    val_paths, val_labels = get_video_paths_and_labels(val_path)
+    # Parse the CSVs to get aligned paths and labels
+    print("Parsing Train CSV...")
+    train_paths, train_labels = parse_daisee_csv(args.data_root, "Train")
+    print("Parsing Validation CSV...")
+    val_paths, val_labels = parse_daisee_csv(args.data_root, "Validation")
     
     print(f"Creating datasets (Train: {len(train_paths)}, Val: {len(val_paths)})...")
     train_dataset = DaiseeDataset(video_paths=train_paths, labels=train_labels)
