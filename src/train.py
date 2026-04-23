@@ -5,6 +5,7 @@ This script orchestrates the fine-tuning process for the VideoMAE model using
 the Hugging Face Trainer. It parses the dataset directory, splits the data,
 and configures optimized TrainingArguments for a Kaggle P100 GPU environment.
 """
+import os
 import argparse
 import random
 import json
@@ -32,7 +33,7 @@ def get_video_paths_and_labels(data_dir):
 
 def main():
     parser = argparse.ArgumentParser(description="Fine-tune VideoMAE on DAiSEE")
-    parser.add_argument("--data_dir", type=str, required=True, help="Path to the DAiSEE dataset")
+    parser.add_argument("--data_root", type=str, required=True, help="Path to the root DAiSEE dataset")
     parser.add_argument("--config", type=str, default="config.json", help="Path to the configuration file")
     args = parser.parse_args()
     
@@ -44,17 +45,16 @@ def main():
     # Instantiate the model executing the ablation study baseline (training only the head)
     model = get_daisee_model(freeze_base=config["freeze_base"])
     
-    print("Loading data...")
-    video_paths, labels = get_video_paths_and_labels(args.data_dir)
+    train_path = os.path.join(args.data_root, "DataSet", "Train")
+    val_path = os.path.join(args.data_root, "DataSet", "Validation")
     
-    # 80/20 Split
-    split_idx = int(len(video_paths) * 0.8)
-    train_paths, val_paths = video_paths[:split_idx], video_paths[split_idx:]
-    train_labels, val_labels = labels[:split_idx], labels[split_idx:]
+    print("Loading data...")
+    train_paths, train_labels = get_video_paths_and_labels(train_path)
+    val_paths, val_labels = get_video_paths_and_labels(val_path)
     
     print(f"Creating datasets (Train: {len(train_paths)}, Val: {len(val_paths)})...")
-    train_dataset = DaiseeDataset(train_paths, train_labels)
-    val_dataset = DaiseeDataset(val_paths, val_labels)
+    train_dataset = DaiseeDataset(video_paths=train_paths, labels=train_labels)
+    eval_dataset = DaiseeDataset(video_paths=val_paths, labels=val_labels)
     
     # Configure TrainingArguments for P100 GPU on Kaggle
     training_args = TrainingArguments(
@@ -76,7 +76,7 @@ def main():
         model=model,
         args=training_args,
         train_dataset=train_dataset,
-        eval_dataset=val_dataset,
+        eval_dataset=eval_dataset,
     )
     
     print("Starting training loop...")
