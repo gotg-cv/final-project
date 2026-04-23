@@ -67,8 +67,6 @@ class DaiseeDataset(Dataset):
         video_tensor = inputs["pixel_values"].squeeze(0)
         
         label_tensor = torch.tensor(label, dtype=torch.long)
-        
-        # Return a dictionary instead of a tuple so the HF Trainer can parse it
         return {
             "pixel_values": video_tensor,
             "labels": label_tensor

@@ -15,28 +15,29 @@ from src.model_builder import get_daisee_model
 from src.data_loader import DaiseeDataset
 
 def parse_daisee_csv(data_root, split_name):
-    """
-    Parses the DAiSEE CSV and builds aligned lists of valid video paths and labels.
-    split_name should be 'Train', 'Validation', or 'Test'.
-    """
     csv_path = os.path.join(data_root, "Labels", f"{split_name}Labels.csv")
     df = pd.read_csv(csv_path)
+    df.columns = df.columns.str.strip() # Sanitize dirty headers
     
-    video_paths = []
-    labels = []
+    video_paths, labels = [], []
     
     for _, row in df.iterrows():
-        clip_id = str(row['ClipID']).replace('.avi', '').replace('.mp4', '')
-        folder_id = clip_id[:6] # The first 6 digits determine the parent folder
+        clip_id_ext = str(row['ClipID']).strip()
+        clip_id = clip_id_ext.replace('.avi', '').replace('.mp4', '')
+        folder_id = clip_id[:6]
         
-        # Construct exact path: DataSet/Train/400023/4000231047/4000231047.avi
-        video_path = os.path.join(data_root, "DataSet", split_name, folder_id, clip_id, f"{clip_id}.avi")
+        # Exact DAiSEE structure: DataSet/Train/110001/1100011002/1100011002.avi
+        video_path = os.path.join(data_root, "DataSet", split_name, folder_id, clip_id, clip_id_ext)
         
         if os.path.exists(video_path):
-            # DAiSEE scores: 0=Boredom, 1=Confusion, 2=Engagement, 3=Frustration (to match our model head)
-            scores = [row['Boredom'], row['Confusion'], row['Engagement'], row['Frustration']]
-            dominant_label = scores.index(max(scores))
-            
+            # Explicitly map CSV columns to our model's head indices
+            scores = {
+                0: row['Boredom'],
+                1: row['Confusion'],
+                2: row['Engagement'],
+                3: row['Frustration']
+            }
+            dominant_label = max(scores, key=scores.get)
             video_paths.append(video_path)
             labels.append(dominant_label)
             
