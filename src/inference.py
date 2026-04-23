@@ -5,6 +5,8 @@ from transformers import VideoMAEImageProcessor, VideoMAEForVideoClassification
 
 def extract_frames(video_path, num_frames=16):
     cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise FileNotFoundError(f"OpenCV could not find or open the video at: {video_path}")
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     frame_indices = np.linspace(0, total_frames - 1, num_frames, dtype=int)
     
@@ -42,6 +44,10 @@ def predict_engagement(video_path, model_path="/kaggle/working/daisee_videomae_f
     return prediction
 
 if __name__ == "__main__":
-    # Replace with the path to a test video in your Kaggle input directory
-    test_video = "/kaggle/input/daisee/DataSet/Test/Sample_Video.mp4" 
-    predict_engagement(test_video)
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Run VideoMAE Inference")
+    parser.add_argument("--video_path", type=str, required=True, help="Path to a test video")
+    args = parser.parse_args()
+    
+    predict_engagement(args.video_path)

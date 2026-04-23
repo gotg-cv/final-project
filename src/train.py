@@ -7,6 +7,7 @@ and configures optimized TrainingArguments for a Kaggle P100 GPU environment.
 """
 import argparse
 import random
+import json
 from transformers import Trainer, TrainingArguments
 from src.model_builder import get_daisee_model
 from src.data_loader import DaiseeDataset
@@ -32,11 +33,16 @@ def get_video_paths_and_labels(data_dir):
 def main():
     parser = argparse.ArgumentParser(description="Fine-tune VideoMAE on DAiSEE")
     parser.add_argument("--data_dir", type=str, required=True, help="Path to the DAiSEE dataset")
+    parser.add_argument("--config", type=str, default="config.json", help="Path to the configuration file")
     args = parser.parse_args()
+    
+    print(f"Loading configuration from {args.config}...")
+    with open(args.config, "r") as f:
+        config = json.load(f)
     
     print("Initializing model...")
     # Instantiate the model executing the ablation study baseline (training only the head)
-    model = get_daisee_model(freeze_base=True)
+    model = get_daisee_model(freeze_base=config["freeze_base"])
     
     print("Loading data...")
     video_paths, labels = get_video_paths_and_labels(args.data_dir)
@@ -53,11 +59,11 @@ def main():
     # Configure TrainingArguments for P100 GPU on Kaggle
     training_args = TrainingArguments(
         output_dir="/kaggle/working/daisee_videomae_checkpoints",
-        per_device_train_batch_size=8,
-        per_device_eval_batch_size=8,
-        gradient_accumulation_steps=4,
-        learning_rate=5e-5,
-        num_train_epochs=3,
+        per_device_train_batch_size=config["per_device_train_batch_size"],
+        per_device_eval_batch_size=config["per_device_train_batch_size"],
+        gradient_accumulation_steps=config["gradient_accumulation_steps"],
+        learning_rate=config["learning_rate"],
+        num_train_epochs=config["num_train_epochs"],
         save_strategy="epoch",
         eval_strategy="epoch",
         logging_dir="/kaggle/working/logs",
