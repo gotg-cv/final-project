@@ -1,53 +1,60 @@
-import torch
+import argparse
+
 import cv2
 import numpy as np
-from transformers import VideoMAEImageProcessor, VideoMAEForVideoClassification
+import torch
+from transformers import VideoMAEForVideoClassification, VideoMAEImageProcessor
+
+from src.device_utils import device_name, get_torch_device
+from src.model_builder import MODEL_ID
+
+CLASS_NAMES = {0: "Boredom", 1: "Confusion", 2: "Engagement", 3: "Frustration"}
+
 
 def extract_frames(video_path, num_frames=16):
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        raise FileNotFoundError(f"OpenCV could not find or open the video at: {video_path}")
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    frame_indices = np.linspace(0, total_frames - 1, num_frames, dtype=int)
-    
+        raise FileNotFoundError(video_path)
+    n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    idxs = np.linspace(0, max(n - 1, 0), num_frames, dtype=int)
+
     frames = []
-    for idx in frame_indices:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-        ret, frame = cap.read()
-        if ret:
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frames.append(frame)
+    for i in idxs:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, int(i))
+        ok, frame = cap.read()
+        if ok:
+            frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
     cap.release()
     return frames
 
-def predict_engagement(video_path, model_path="/kaggle/working/daisee_videomae_final"):
-    # 1. Load the fine-tuned model and processor
-    processor = VideoMAEImageProcessor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
+
+def predict_engagement(video_path: str, model_path: str = "outputs/daisee_videomae/final") -> str:
+    device = get_torch_device()
+    print(f"Device: {device_name(device)}")
+
+    processor = VideoMAEImageProcessor.from_pretrained(MODEL_ID)
     model = VideoMAEForVideoClassification.from_pretrained(model_path)
     model.eval()
-    
-    # 2. Process the video
+    model.to(device)
+
     frames = extract_frames(video_path)
-    inputs = processor(list(frames), return_tensors="pt")
-    
-    # 3. Run Inference
+    if len(frames) < 16:
+        raise ValueError(f"Need ≥16 frames, got {len(frames)}: {video_path}")
+
+    batch = processor(list(frames), return_tensors="pt")
+    batch = {k: v.to(device) for k, v in batch.items()}
+
     with torch.no_grad():
-        outputs = model(**inputs)
-        logits = outputs.logits
-        predicted_class_idx = logits.argmax(-1).item()
-        
-    # 4. Map to DAiSEE labels
-    labels = {0: "Boredom", 1: "Confusion", 2: "Engagement", 3: "Frustration"}
-    prediction = labels.get(predicted_class_idx, "Unknown")
-    
-    print(f"Predicted Affective State: {prediction}")
-    return prediction
+        pred = model(**batch).logits.argmax(-1).item()
+
+    name = CLASS_NAMES.get(pred, "Unknown")
+    print(name)
+    return name
+
 
 if __name__ == "__main__":
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="Run VideoMAE Inference")
-    parser.add_argument("--video_path", type=str, required=True, help="Path to a test video")
-    args = parser.parse_args()
-    
-    predict_engagement(args.video_path)
+    p = argparse.ArgumentParser()
+    p.add_argument("--video_path", required=True)
+    p.add_argument("--model_path", default="outputs/daisee_videomae/final")
+    a = p.parse_args()
+    predict_engagement(a.video_path, model_path=a.model_path)

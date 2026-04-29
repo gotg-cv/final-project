@@ -1,0 +1,18 @@
+{
+  "runs": [
+    {
+      "tag": "baseline",
+      "overrides": {}
+    },
+    {
+      "tag": "lr_high",
+      "overrides": { "learning_rate": 1e-4 },
+      "epochs": 2
+    },
+    {
+      "tag": "full_unfrozen_stub",
+      "overrides": { "freeze_base": false, "learning_rate": 1e-5 },
+      "epochs": 1
+    }
+  ]
+}

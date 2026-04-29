@@ -5,3 +5,5 @@ opencv-python
 numpy
 tqdm
 pandas
+scikit-learn
+matplotlib>=3.8

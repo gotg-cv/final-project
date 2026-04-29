@@ -1,75 +1,72 @@
-"""
-train.py
-
-This script orchestrates the fine-tuning process for the VideoMAE model using 
-the Hugging Face Trainer. It parses the dataset directory, splits the data,
-and configures optimized TrainingArguments for a Kaggle P100 GPU environment.
-"""
-import os
 import argparse
-import random
 import json
-import pandas as pd
-from transformers import Trainer, TrainingArguments
-from src.model_builder import get_daisee_model
-from src.data_loader import DaiseeDataset
+import os
 
-def parse_daisee_csv(data_root, split_name):
-    csv_path = os.path.join(data_root, "Labels", f"{split_name}Labels.csv")
-    df = pd.read_csv(csv_path)
-    df.columns = df.columns.str.strip() # Sanitize dirty headers
-    
-    video_paths, labels = [], []
-    
-    for _, row in df.iterrows():
-        clip_id_ext = str(row['ClipID']).strip()
-        clip_id = clip_id_ext.replace('.avi', '').replace('.mp4', '')
-        folder_id = clip_id[:6]
-        
-        # Exact DAiSEE structure: DataSet/Train/110001/1100011002/1100011002.avi
-        video_path = os.path.join(data_root, "DataSet", split_name, folder_id, clip_id, clip_id_ext)
-        
-        if os.path.exists(video_path):
-            # Explicitly map CSV columns to our model's head indices
-            scores = {
-                0: row['Boredom'],
-                1: row['Confusion'],
-                2: row['Engagement'],
-                3: row['Frustration']
-            }
-            dominant_label = max(scores, key=scores.get)
-            video_paths.append(video_path)
-            labels.append(dominant_label)
-            
-    return video_paths, labels
+from transformers import Trainer, TrainingArguments
+
+from src.daisee_io import parse_daisee_csv
+from src.data_loader import DaiseeDataset
+from src.device_utils import device_name, get_torch_device
+from src.metrics_utils import compute_metrics
+from src.model_builder import get_daisee_model
+
 
 def main():
     parser = argparse.ArgumentParser(description="Fine-tune VideoMAE on DAiSEE")
-    parser.add_argument("--data_root", type=str, required=True, help="Path to the root DAiSEE dataset")
-    parser.add_argument("--config", type=str, default="config.json", help="Path to the configuration file")
+    parser.add_argument("--data_root", required=True, help="DAiSEE root directory")
+    parser.add_argument("--config", default="config.json")
+    parser.add_argument(
+        "--output_dir",
+        default="outputs/daisee_videomae",
+        help="Checkpoints and logs (use a persistent path when on Colab / Drive)",
+    )
+    parser.add_argument(
+        "--resume_from_checkpoint",
+        default=None,
+        help="Path to a checkpoint-N folder to resume from",
+    )
+    parser.add_argument(
+        "--max_train_samples",
+        type=int,
+        default=None,
+        help="Truncate train set for quick runs (hyperparam probing)",
+    )
+    parser.add_argument(
+        "--max_eval_samples",
+        type=int,
+        default=None,
+        help="Truncate validation set for quick runs",
+    )
     args = parser.parse_args()
-    
-    print(f"Loading configuration from {args.config}...")
-    with open(args.config, "r") as f:
+
+    with open(args.config) as f:
         config = json.load(f)
-    
-    print("Initializing model...")
-    # Instantiate the model executing the ablation study baseline (training only the head)
+
+    print(f"Local pick for device: {device_name(get_torch_device())} (HF Trainer will set the real device)")
+
     model = get_daisee_model(freeze_base=config["freeze_base"])
-    
-    # Parse the CSVs to get aligned paths and labels
-    print("Parsing Train CSV...")
+
+    print("Train CSV…")
     train_paths, train_labels = parse_daisee_csv(args.data_root, "Train")
-    print("Parsing Validation CSV...")
+    print("Validation CSV…")
     val_paths, val_labels = parse_daisee_csv(args.data_root, "Validation")
-    
-    print(f"Creating datasets (Train: {len(train_paths)}, Val: {len(val_paths)})...")
+
+    if args.max_train_samples:
+        train_paths = train_paths[: args.max_train_samples]
+        train_labels = train_labels[: args.max_train_samples]
+    if args.max_eval_samples:
+        val_paths = val_paths[: args.max_eval_samples]
+        val_labels = val_labels[: args.max_eval_samples]
+
+    print(f"Samples — train: {len(train_paths)}, val: {len(val_paths)}")
     train_dataset = DaiseeDataset(video_paths=train_paths, labels=train_labels)
     eval_dataset = DaiseeDataset(video_paths=val_paths, labels=val_labels)
-    
-    # Configure TrainingArguments for P100 GPU on Kaggle
+
+    os.makedirs(args.output_dir, exist_ok=True)
+    log_dir = os.path.join(args.output_dir, "logs")
+
     training_args = TrainingArguments(
-        output_dir="/kaggle/working/daisee_videomae_checkpoints",
+        output_dir=args.output_dir,
         per_device_train_batch_size=config["per_device_train_batch_size"],
         per_device_eval_batch_size=config["per_device_train_batch_size"],
         gradient_accumulation_steps=config["gradient_accumulation_steps"],
@@ -77,26 +74,34 @@ def main():
         num_train_epochs=config["num_train_epochs"],
         save_strategy="epoch",
         eval_strategy="epoch",
-        logging_dir="/kaggle/working/logs",
+        logging_dir=log_dir,
         logging_steps=10,
-        remove_unused_columns=False, # Essential for VideoMAE with custom pixel_values input
+        remove_unused_columns=False,  # keep pixel_values through the collator
+        save_total_limit=None,
+        report_to="none",
+        load_best_model_at_end=True,
+        metric_for_best_model="f1_macro",
+        greater_is_better=True,
     )
-    
-    print("Initializing Trainer...")
+
     trainer = Trainer(
         model=model,
         args=training_args,
+        compute_metrics=compute_metrics,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
     )
-    
-    print("Starting training loop...")
-    trainer.train()
-    
-    final_output_dir = "/kaggle/working/daisee_videomae_final"
-    print(f"Saving final model to {final_output_dir}...")
-    trainer.save_model(final_output_dir)
-    print("Training complete!")
+    print(f"Trainer device: {trainer.args.device}")
+
+    if args.resume_from_checkpoint:
+        print(f"Resuming from {args.resume_from_checkpoint}")
+    trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
+
+    final_dir = os.path.join(args.output_dir, "final")
+    os.makedirs(final_dir, exist_ok=True)
+    trainer.save_model(final_dir)
+    print(f"Saved model to {final_dir}")
+
 
 if __name__ == "__main__":
     main()

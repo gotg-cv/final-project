@@ -1,0 +1,93 @@
+# Kaggle notebook — use branch `kaggle-pipeline`
+
+The upstream `main` clone is missing several pieces (scikit-learn, evaluation, correct inference invocation).
+Train from **`kaggle-pipeline`**:
+
+```bash
+%cd /kaggle/working
+!rm -rf final-project
+!git clone -b kaggle-pipeline --single-branch https://github.com/gotg-cv/final-project.git
+%cd final-project
+!pip install -r requirements.txt
+```
+
+## Dataset path
+
+After adding **DAiSEE** as Input, list mounts and set `DATA_ROOT` to the folder that **directly** contains **`Labels/`** and **`DataSet/`** (names vary):
+
+```python
+import os
+for x in sorted(os.listdir("/kaggle/input")):
+    print(x)
+```
+
+Example (adjust to your mount):  
+`DATA_ROOT = "/kaggle/input/daisee/DAiSEE"`  
+or  
+`DATA_ROOT = "/kaggle/input/daisee-dataset/DAiSEE"`
+
+## Sanity check
+
+```bash
+!python check_daisee_paths.py --data_root "$DATA_ROOT"
+```
+
+## Train (use `/kaggle/working` for weights)
+
+```bash
+%cd /kaggle/working/final-project
+!python src/train.py \
+  --data_root "/kaggle/input/daisee/DAiSEE" \
+  --output_dir /kaggle/working/out \
+  --config config.json
+```
+
+Resume:
+
+```bash
+!python src/train.py \
+  --data_root "/kaggle/input/daisee/DAiSEE" \
+  --output_dir /kaggle/working/out \
+  --resume_from_checkpoint /kaggle/working/out/checkpoint-1
+```
+
+## Evaluate (confusion matrix + metrics.json)
+
+```bash
+!python src/evaluate.py \
+  --data_root "/kaggle/input/daisee/DAiSEE" \
+  --model_path /kaggle/working/out/final \
+  --out_dir /kaggle/working/out/eval_report
+```
+
+## Inference — do NOT use `python -m src.inference` unless cwd is repo root
+
+`ModuleNotFoundError: No module named 'src'` happens when Python’s cwd is wrong (e.g. `/kaggle/working`).
+
+```bash
+%cd /kaggle/working/final-project
+!python src/inference.py \
+  --video_path "/kaggle/input/daisee/DAiSEE/DataSet/Validation/400023/4000232044/4000232044.avi" \
+  --model_path /kaggle/working/out/final
+```
+
+## Optional: hyperparameter sweep (sequential)
+
+Cap samples while searching:
+
+```bash
+!python run_sweep.py \
+  --data_root "/kaggle/input/daisee/DAiSEE" \
+  --output_parent /kaggle/working/sweeps \
+  --max_train_samples 400 \
+  --max_eval_samples 200
+```
+
+Edit **`sweep_presets.json`** before long sweeps.
+
+Optional HF auth for rate limits:
+
+```bash
+import os
+os.environ["HF_TOKEN"] = "hf_..."
+```
