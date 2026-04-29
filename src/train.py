@@ -47,6 +47,7 @@ def main():
     parser = argparse.ArgumentParser(description="Fine-tune VideoMAE on DAiSEE")
     parser.add_argument("--data_root", type=str, required=True, help="Path to the root DAiSEE dataset")
     parser.add_argument("--config", type=str, default="config.json", help="Path to the configuration file")
+    parser.add_argument("--ablation", action="store_true", help="Run ablation study (unfreeze last two layers)")
     args = parser.parse_args()
     
     print(f"Loading configuration from {args.config}...")
@@ -54,8 +55,8 @@ def main():
         config = json.load(f)
     
     print("Initializing model...")
-    # Instantiate the model executing the ablation study baseline (training only the head)
-    model = get_daisee_model(freeze_base=config["freeze_base"])
+    # Instantiate the model executing the ablation study or baseline
+    model = get_daisee_model(ablation=args.ablation)
     
     # Parse the CSVs to get aligned paths and labels
     print("Parsing Train CSV...")
@@ -68,8 +69,15 @@ def main():
     eval_dataset = DaiseeDataset(video_paths=val_paths, labels=val_labels)
     
     # Configure TrainingArguments for P100 GPU on Kaggle
+    if args.ablation:
+        output_dir = "/kaggle/working/daisee_videomae_ablation_checkpoints"
+        final_save_path = "/kaggle/working/daisee_videomae_ablation_final"
+    else:
+        output_dir = "/kaggle/working/daisee_videomae_checkpoints"
+        final_save_path = "/kaggle/working/daisee_videomae_final"
+
     training_args = TrainingArguments(
-        output_dir="/kaggle/working/daisee_videomae_checkpoints",
+        output_dir=output_dir,
         per_device_train_batch_size=config["per_device_train_batch_size"],
         per_device_eval_batch_size=config["per_device_train_batch_size"],
         gradient_accumulation_steps=config["gradient_accumulation_steps"],
@@ -93,9 +101,8 @@ def main():
     print("Starting training loop...")
     trainer.train()
     
-    final_output_dir = "/kaggle/working/daisee_videomae_final"
-    print(f"Saving final model to {final_output_dir}...")
-    trainer.save_model(final_output_dir)
+    print(f"Saving final model to {final_save_path}...")
+    trainer.save_model(final_save_path)
     print("Training complete!")
 
 if __name__ == "__main__":

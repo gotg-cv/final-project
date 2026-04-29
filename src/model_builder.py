@@ -8,10 +8,10 @@ Boredom, Confusion, Engagement, and Frustration.
 """
 from transformers import VideoMAEForVideoClassification
 
-def get_daisee_model(freeze_base=False):
+def get_daisee_model(ablation=False):
     """
     Loads the VideoMAE model, swaps the classification head for 4 classes,
-    and optionally freezes the base transformer layers.
+    and handles parameter freezing based on the ablation flag.
     """
     model_name = "MCG-NJU/videomae-base-finetuned-kinetics"
     
@@ -22,13 +22,18 @@ def get_daisee_model(freeze_base=False):
         ignore_mismatched_sizes=True
     )
     
-    if freeze_base:
-        # Freeze all layers
-        for param in model.parameters():
-            param.requires_grad = False
-            
-        # Unfreeze only the final classifier head
-        for param in model.classifier.parameters():
-            param.requires_grad = True
+    for name, param in model.named_parameters():
+        if ablation:
+            # Unfreeze the classifier AND the last two transformer blocks (10 and 11)
+            if "classifier" in name or "encoder.layer.10" in name or "encoder.layer.11" in name:
+                param.requires_grad = True
+            else:
+                param.requires_grad = False
+        else:
+            # Default: Unfreeze ONLY the classifier head
+            if "classifier" in name:
+                param.requires_grad = True
+            else:
+                param.requires_grad = False
             
     return model

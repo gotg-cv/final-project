@@ -48,6 +48,7 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="Run VideoMAE Inference")
     parser.add_argument("--video_path", type=str, required=True, help="Path to a test video")
+    parser.add_argument("--model_path", type=str, default="/kaggle/working/daisee_videomae_final", help="Path to the fine-tuned model")
     args = parser.parse_args()
     
-    predict_engagement(args.video_path)
+    predict_engagement(args.video_path, model_path=args.model_path)
