@@ -11,6 +11,7 @@ import random
 import json
 import pandas as pd
 from transformers import Trainer, TrainingArguments
+from transformers.trainer_utils import get_last_checkpoint
 from src.model_builder import get_daisee_model
 from src.data_loader import DaiseeDataset
 
@@ -99,7 +100,15 @@ def main():
     )
     
     print("Starting training loop...")
-    trainer.train()
+    last_checkpoint = None
+    if os.path.isdir(output_dir):
+        last_checkpoint = get_last_checkpoint(output_dir)
+        if last_checkpoint is not None:
+            print(f"Resuming training from checkpoint: {last_checkpoint}")
+        else:
+            print("No valid checkpoint found. Starting training from scratch.")
+            
+    trainer.train(resume_from_checkpoint=last_checkpoint)
     
     print(f"Saving final model to {final_save_path}...")
     trainer.save_model(final_save_path)
