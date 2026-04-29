@@ -1,6 +1,11 @@
 import argparse
 import json
-import os
+import os, sys
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 import numpy as np
 from sklearn.metrics import classification_report, confusion_matrix, f1_score
