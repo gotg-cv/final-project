@@ -24,6 +24,7 @@ Final_Project/
 ├── run_sweep.py            # Sequential hyperparameter runs
 ├── sweep_presets.json      # Sweep definitions
 ├── check_daisee_paths.py
+├── plot_run_artifacts.py   # Training curves + confusion from run + metrics.json
 ├── dry_run.py, smoke_test_dataset.py
 ├── config.json
 ├── requirements.txt
@@ -158,6 +159,20 @@ After training, **`outputs/.../final/`** holds the best checkpoint. Report on th
 ```
 
 Produces **`metrics.json`** (macro F1, sklearn report, confusion matrix) and **`confusion_matrix.png`** if matplotlib is available.
+
+---
+
+## Report figures
+
+To rebuild figures from artifacts (e.g. after copying a Kaggle run locally), keep the **`checkpoint-*`** folders Trainer wrote — not only **`final/`** — so **`trainer_state.json`** exists.
+
+```bash
+.venv/bin/python plot_run_artifacts.py \
+  --run_dir outputs/run01 \
+  --metrics_json outputs/run01/eval_report/metrics.json
+```
+
+Writes **`plots/training_curves.png`** (loss + eval metrics from `log_history`) and **`plots/confusion_matrix.png`** (from `metrics.json`). Omit `--metrics_json` if you only need curves; use **`--out_dir`** to choose the output folder.
 
 ---
 
