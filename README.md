@@ -174,6 +174,14 @@ To rebuild figures from artifacts (e.g. after copying a Kaggle run locally), kee
 
 Writes **`plots/training_curves.png`** (loss + eval metrics from `log_history`) and **`plots/confusion_matrix.png`** (from `metrics.json`). Omit `--metrics_json` if you only need curves; use **`--out_dir`** to choose the output folder.
 
+If you only have a **downloaded Kaggle `.ipynb`** (no `checkpoint-*` folders), training cells often still contain Trainer **stdout** with `loss` / `eval_loss` dict lines. Parse those into PNGs:
+
+```bash
+.venv/bin/python plot_run_artifacts.py --ipynb ~/Downloads/your_notebook.ipynb
+```
+
+That yields **training + eval loss curves** per training cell (e.g. baseline vs ablation). It does **not** recover a confusion matrix from the notebook text; re-run **`src/evaluate.py`** (or use saved **`metrics.json`**) for that.
+
 ---
 
 ## Hyperparameter sweep

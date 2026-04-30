@@ -7,17 +7,111 @@ Build report figures from a Hugging Face Trainer run directory:
 trainer_state.json lives under each checkpoint-* folder; the script picks the
 longest log_history (full training to date).
 
+You can also pass --ipynb to rebuild training loss / eval loss curves from
+saved notebook stdout (Kaggle downloads often have Trainer dict lines but no
+embedded PNG plots). Confusion matrices are not present in that text; use
+--metrics_json from evaluate.py for those.
+
 Usage (after you copy the run folder from Kaggle):
   python plot_run_artifacts.py --run_dir outputs/run01
   python plot_run_artifacts.py --run_dir outputs/run01 \\
     --metrics_json outputs/run01/eval_report/metrics.json
+
+  python plot_run_artifacts.py --ipynb ~/Downloads/my_run.ipynb
 """
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
+import re
 from glob import glob
+
+
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
+def _strip_ansi(s: str) -> str:
+    return _ANSI_ESCAPE.sub("", s)
+
+
+def _to_float(val) -> float | None:
+    if val is None:
+        return None
+    if isinstance(val, (int, float)):
+        return float(val)
+    if isinstance(val, str):
+        try:
+            return float(val)
+        except ValueError:
+            return None
+    return None
+
+
+def parse_trainer_dicts_from_notebook_text(text: str) -> list[dict]:
+    """Parse HF Trainer / tqdm dict lines from captured notebook stdout."""
+    rows: list[dict] = []
+    for raw in text.splitlines():
+        line = _strip_ansi(raw)
+        i = line.find("{")
+        j = line.rfind("}")
+        if i < 0 or j <= i:
+            continue
+        chunk = line[i : j + 1]
+        try:
+            d = ast.literal_eval(chunk)
+        except (ValueError, SyntaxError):
+            continue
+        if isinstance(d, dict) and "epoch" in d:
+            rows.append(d)
+    return rows
+
+
+def stdout_dicts_to_log_history(rows: list[dict]) -> list[dict]:
+    """Map stdout dicts (string or float values) to plot_training_curves rows."""
+    hist: list[dict] = []
+    for d in rows:
+        ep = _to_float(d.get("epoch"))
+        if ep is None:
+            continue
+        ev_loss = _to_float(d.get("eval_loss"))
+        tr_loss = _to_float(d.get("loss"))
+        if ev_loss is not None:
+            row: dict = {"epoch": ep, "eval_loss": ev_loss}
+            for k_src, k_dst in (
+                ("eval_accuracy", "eval_accuracy"),
+                ("eval_f1_macro", "eval_f1_macro"),
+            ):
+                v = _to_float(d.get(k_src))
+                if v is not None:
+                    row[k_dst] = v
+            hist.append(row)
+        elif tr_loss is not None:
+            hist.append({"epoch": ep, "loss": tr_loss})
+    return hist
+
+
+def load_log_histories_from_ipynb(ipynb_path: str) -> list[tuple[int, list[dict]]]:
+    with open(ipynb_path) as f:
+        nb = json.load(f)
+    results: list[tuple[int, list[dict]]] = []
+    for i, cell in enumerate(nb.get("cells", [])):
+        if cell.get("cell_type") != "code":
+            continue
+        src = "".join(cell.get("source", []))
+        if "src.train" not in src:
+            continue
+        text = ""
+        for o in cell.get("outputs", []):
+            if o.get("output_type") == "stream":
+                text += "".join(o.get("text", []))
+        if not text.strip():
+            continue
+        hist = stdout_dicts_to_log_history(parse_trainer_dicts_from_notebook_text(text))
+        if hist:
+            results.append((i, hist))
+    return results
 
 
 def load_log_history(run_dir: str) -> list[dict]:
@@ -37,7 +131,12 @@ def load_log_history(run_dir: str) -> list[dict]:
     return best
 
 
-def plot_training_curves(log_history: list[dict], out_path: str) -> None:
+def plot_training_curves(
+    log_history: list[dict],
+    out_path: str,
+    *,
+    suptitle: str = "Training curves (from Trainer log_history)",
+) -> None:
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -97,7 +196,7 @@ def plot_training_curves(log_history: list[dict], out_path: str) -> None:
     else:
         axes[1].text(0.5, 0.5, "No eval metrics in log_history", ha="center")
 
-    fig.suptitle("Training curves (from Trainer log_history)")
+    fig.suptitle(suptitle)
     fig.tight_layout()
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
@@ -132,14 +231,41 @@ def main() -> None:
     p = argparse.ArgumentParser(description="Plot training curves + optional confusion matrix")
     p.add_argument("--run_dir", default=None, help="Trainer output_dir (with checkpoint-* folders)")
     p.add_argument("--metrics_json", default=None, help="Path to evaluate.py metrics.json")
+    p.add_argument(
+        "--ipynb",
+        default=None,
+        help="Jupyter notebook with executed training cell stdout (loss / eval_loss dict lines)",
+    )
     p.add_argument("--out_dir", default=None, help="Where to save PNGs (default: run_dir/plots or next to metrics.json)")
     args = p.parse_args()
 
-    if not args.run_dir and not args.metrics_json:
+    if not args.run_dir and not args.metrics_json and not args.ipynb:
         p.print_help()
         raise SystemExit(1)
 
     out_base = args.out_dir
+
+    if args.ipynb:
+        if not os.path.isfile(args.ipynb):
+            print("Missing notebook:", args.ipynb)
+        else:
+            nb_stem = os.path.splitext(os.path.basename(args.ipynb))[0]
+            ipynb_out = args.out_dir or os.path.join(os.path.dirname(os.path.abspath(args.ipynb)), f"{nb_stem}_plots")
+            os.makedirs(ipynb_out, exist_ok=True)
+            runs = load_log_histories_from_ipynb(args.ipynb)
+            if not runs:
+                print(
+                    "No training log dicts found. Ensure the notebook was executed and cells that run "
+                    "src.train still contain stream output."
+                )
+            for cell_idx, hist in runs:
+                safe = re.sub(r"[^\w\-]+", "_", nb_stem).strip("_")[:80] or "notebook"
+                png = os.path.join(ipynb_out, f"training_curves_{safe}_cell_{cell_idx}.png")
+                plot_training_curves(
+                    hist,
+                    png,
+                    suptitle=f"Training curves (parsed notebook stdout, cell {cell_idx})",
+                )
 
     if args.run_dir:
         out_base = args.out_dir or os.path.join(args.run_dir, "plots")
