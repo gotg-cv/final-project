@@ -18,7 +18,7 @@ from src.data_loader import DaiseeDataset
 def parse_daisee_csv(data_root, split_name):
     csv_path = os.path.join(data_root, "Labels", f"{split_name}Labels.csv")
     df = pd.read_csv(csv_path)
-    df.columns = df.columns.str.strip() # Sanitize dirty headers
+    df.columns = df.columns.str.strip() # sanitize dirty headers
     
     video_paths, labels = [], []
     
@@ -27,11 +27,11 @@ def parse_daisee_csv(data_root, split_name):
         clip_id = clip_id_ext.replace('.avi', '').replace('.mp4', '')
         folder_id = clip_id[:6]
         
-        # Exact DAiSEE structure: DataSet/Train/110001/1100011002/1100011002.avi
+        # exact daisee structure: dataset/train/110001/1100011002/1100011002.avi
         video_path = os.path.join(data_root, "DataSet", split_name, folder_id, clip_id, clip_id_ext)
         
         if os.path.exists(video_path):
-            # Explicitly map CSV columns to our model's head indices
+            # explicitly map csv columns to our model's head indices
             scores = {
                 0: row['Boredom'],
                 1: row['Confusion'],
@@ -56,10 +56,10 @@ def main():
         config = json.load(f)
     
     print("Initializing model...")
-    # Instantiate the model executing the ablation study or baseline
+    # instantiate the model executing the ablation study or baseline
     model = get_daisee_model(ablation=args.ablation)
     
-    # Parse the CSVs to get aligned paths and labels
+    # parse the csvs to get aligned paths and labels
     print("Parsing Train CSV...")
     train_paths, train_labels = parse_daisee_csv(args.data_root, "Train")
     print("Parsing Validation CSV...")
@@ -69,7 +69,7 @@ def main():
     train_dataset = DaiseeDataset(video_paths=train_paths, labels=train_labels)
     eval_dataset = DaiseeDataset(video_paths=val_paths, labels=val_labels)
     
-    # Configure TrainingArguments for P100 GPU on Kaggle
+    # configure trainingarguments for p100 gpu on kaggle
     if args.ablation:
         output_dir = "/kaggle/working/daisee_videomae_ablation_checkpoints"
         final_save_path = "/kaggle/working/daisee_videomae_ablation_final"
@@ -88,7 +88,7 @@ def main():
         eval_strategy="epoch",
         logging_dir="/kaggle/working/logs",
         logging_steps=10,
-        remove_unused_columns=False, # Essential for VideoMAE with custom pixel_values input
+        remove_unused_columns=False, # essential for videomae with custom pixel_values input
     )
     
     print("Initializing Trainer...")

@@ -21,22 +21,22 @@ def extract_frames(video_path, num_frames=16):
     return frames
 
 def predict_engagement(video_path, model_path="/kaggle/working/daisee_videomae_final"):
-    # 1. Load the fine-tuned model and processor
+    # load the fine-tuned model and processor
     processor = VideoMAEImageProcessor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
     model = VideoMAEForVideoClassification.from_pretrained(model_path)
     model.eval()
     
-    # 2. Process the video
+    # process the video
     frames = extract_frames(video_path)
     inputs = processor(list(frames), return_tensors="pt")
     
-    # 3. Run Inference
+    # run inference
     with torch.no_grad():
         outputs = model(**inputs)
         logits = outputs.logits
         predicted_class_idx = logits.argmax(-1).item()
         
-    # 4. Map to DAiSEE labels
+    # map to daisee labels
     labels = {0: "Boredom", 1: "Confusion", 2: "Engagement", 3: "Frustration"}
     prediction = labels.get(predicted_class_idx, "Unknown")
     

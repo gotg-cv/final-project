@@ -21,7 +21,7 @@ def parse_test_csv(data_root):
     csv_path = os.path.join(data_root, "Labels", "TestLabels.csv")
     df = pd.read_csv(csv_path)
     
-    # Sanitize headers
+    # sanitize headers
     df.columns = df.columns.str.strip()
     
     video_paths = []
@@ -32,7 +32,7 @@ def parse_test_csv(data_root):
         clip_id = clip_id_ext.replace('.avi', '').replace('.mp4', '')
         folder_id = clip_id[:6]
         
-        # DAiSEE structure: DataSet/Test/110001/1100011002/1100011002.avi
+        # daisee structure: dataset/test/110001/1100011002/1100011002.avi
         video_path = os.path.join(data_root, "DataSet", "Test", folder_id, clip_id, clip_id_ext)
         
         if os.path.exists(video_path):

@@ -15,7 +15,7 @@ def get_daisee_model(ablation=False):
     """
     model_name = "MCG-NJU/videomae-base-finetuned-kinetics"
     
-    # Load model with a new 4-class head, discarding the original 400-class head
+    # load model with a new 4-class head, discarding the original 400-class head
     model = VideoMAEForVideoClassification.from_pretrained(
         model_name,
         num_labels=4,
@@ -24,13 +24,13 @@ def get_daisee_model(ablation=False):
     
     for name, param in model.named_parameters():
         if ablation:
-            # Unfreeze the classifier AND the last two transformer blocks (10 and 11)
+            # unfreeze the classifier and the last two transformer blocks (10 and 11)
             if "classifier" in name or "encoder.layer.10" in name or "encoder.layer.11" in name:
                 param.requires_grad = True
             else:
                 param.requires_grad = False
         else:
-            # Default: Unfreeze ONLY the classifier head
+            # default: unfreeze only the classifier head
             if "classifier" in name:
                 param.requires_grad = True
             else:

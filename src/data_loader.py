@@ -29,11 +29,11 @@ class DaiseeDataset(Dataset):
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
         if total_frames == 0:
-            # Handle edge case where video cannot be read
+            # handle edge case where video cannot be read
             cap.release()
             return [np.zeros((224, 224, 3), dtype=np.uint8) for _ in range(num_frames)]
             
-        # Get uniformly distributed frame indices
+        # get uniformly distributed frame indices
         indices = np.linspace(0, total_frames - 1, num_frames, dtype=int)
         
         frames = []
@@ -41,10 +41,10 @@ class DaiseeDataset(Dataset):
             cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
             ret, frame = cap.read()
             if not ret:
-                # Fallback if frame cannot be read
+                # fallback if frame cannot be read
                 frame = np.zeros((224, 224, 3), dtype=np.uint8)
             else:
-                # Convert BGR to RGB
+                # convert bgr to rgb
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             frames.append(frame)
             
@@ -55,15 +55,15 @@ class DaiseeDataset(Dataset):
         video_path = self.video_paths[idx]
         label = self.labels[idx]
         
-        # Extract exactly 16 frames
+        # extract exactly 16 frames
         frames = self._extract_frames(video_path, num_frames=16)
         
-        # Process frames using VideoMAE processor (normalization, resizing to 224x224)
-        # The processor expects a list of 3D numpy arrays (H, W, C)
+        # process frames using videomae processor (normalization, resizing to 224x224)
+        # the processor expects a list of 3d numpy arrays (h, w, c)
         inputs = self.processor(list(frames), return_tensors="pt")
         
         # inputs["pixel_values"] will have shape (1, num_frames, num_channels, height, width)
-        # We squeeze the first dimension to get (num_frames, num_channels, height, width)
+        # we squeeze the first dimension to get (num_frames, num_channels, height, width)
         video_tensor = inputs["pixel_values"].squeeze(0)
         
         label_tensor = torch.tensor(label, dtype=torch.long)
