@@ -1,7 +1,7 @@
-# Context-Aware Classroom Engagement Monitor
+# Classroom Engagement Monitor
 
 ## Project Title & Overview
-This project presents a Context-Aware Classroom Engagement Monitor designed to classify student affective states. It leverages a fine-tuned VideoMAE model (`videomae-base-finetuned-kinetics`) to analyze spatio-temporal dynamics from video clips. The model is trained on the DAiSEE dataset to detect four core affective states: Boredom, Confusion, Engagement, and Frustration.
+This project presents a Classroom Engagement Monitor designed to classify student affective states. It leverages a fine-tuned VideoMAE model (`videomae-base-finetuned-kinetics`) to analyze spatio-temporal dynamics from video clips. The model is trained on the DAiSEE dataset to detect four core affective states: Boredom, Confusion, Engagement, and Frustration.
 
 ## Environment Requirements
 The project's dependencies are rigorously managed using a dedicated `requirements.txt` file. This ensures full reproducibility of the Python environment, including the required modules for PyTorch, Transformers, OpenCV, and scikit-learn.
